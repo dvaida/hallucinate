@@ -8,12 +8,12 @@ setup(
     author_email='',
     packages=['hallucinate'],
     install_requires=[
-        #'numpy',
-        #'scipy',
-        #'matplotlib',
-        #'sklearn',
+        'numpy',
+        'scipy',
+        'matplotlib',
+        'sklearn',
         'seaborn',
-        #'pandas',
+        'pandas',
         'joblib',
         'mlxtend'
     ],
