@@ -1,0 +1,10 @@
+setup.py
+hallucinate/__init__.py
+hallucinate/config_params.py
+hallucinate/hallucinate.py
+hallucinate/transform.py
+hallucinate.egg-info/PKG-INFO
+hallucinate.egg-info/SOURCES.txt
+hallucinate.egg-info/dependency_links.txt
+hallucinate.egg-info/requires.txt
+hallucinate.egg-info/top_level.txt
