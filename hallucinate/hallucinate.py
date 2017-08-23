@@ -33,7 +33,7 @@ from mlxtend.classifier import StackingClassifier
 from .transform import T_MAP
 
 
-class ClassifierConfig(object):
+class EstimatorConfig(object):
     def __init__(self, instance, grid_params, name, cons_params={}, stacking=False):
         self.__instance = instance
         self.grid_params = grid_params
@@ -76,7 +76,7 @@ class Result(object):
             return '{}_{:g}'.format(self.feature_source_name, self.f_sel_threshold)
 
 
-class FeaturesSource(object):
+class Features(object):
     def __init__(self, features, train_data=None, test_data=None, target=None, name=None,
                  parent=None):
         self.name = name
@@ -103,9 +103,9 @@ class FeaturesSource(object):
             raise Exception('The first features source in the experiment must specify a target')
 
         if not self.name:
-            self.name = '+'.join([a[:2] for a in self.features_including_parents()])
+            self.name = '+'.join([a[:2] for a in self._features_including_parents()])
 
-    def set_dim_reducer(self, reducer):
+    def set_feature_selector(self, reducer):
         self.feature_selectors.clear()
         self.feature_selectors.append(reducer)
 
@@ -121,7 +121,7 @@ class FeaturesSource(object):
         self.add_transformation(tr)
         return tr
 
-    def set_reducer_threshold(self, new_value):
+    def set_selector_threshold(self, new_value):
         if len(self.feature_selectors) == 0:
             return
         if len(self.feature_selectors) != 1:
@@ -265,21 +265,21 @@ class FeaturesSource(object):
         nums = df.select_dtypes(exclude=[object]).columns.values.tolist()
         return nums
 
-    def unique_values_for(self, feature_name, preprocess=False):
+    def _unique_values_for(self, feature_name, preprocess=False):
         df = self.get_train_data() if not preprocess else self.preprocess()
         return df[feature_name].unique().values
 
-    def features_including_parents(self):
-        p_features = self.parent.features_including_parents() if self.parent else []
+    def _features_including_parents(self):
+        p_features = self.parent._features_including_parents() if self.parent else []
         return [a for a in (p_features + self.features) if a != self.target]
 
-    def transformations_including_parents(self):
-        tfs = self.parent.transformations_including_parents() if self.parent else []
+    def _transformations_including_parents(self):
+        tfs = self.parent._transformations_including_parents() if self.parent else []
         return tfs + self.transformations
 
     def __repr__(self):
-        tfs = '\n'.join(['  -- {}'.format(a) for a in self.transformations_including_parents()])
-        return ' -- FEATURES: {}\n{}\n'.format(', '.join(self.features_including_parents()), tfs)
+        tfs = '\n'.join(['  -- {}'.format(a) for a in self._transformations_including_parents()])
+        return ' -- FEATURES: {}\n{}\n'.format(', '.join(self._features_including_parents()), tfs)
 
 
 def VotingBuilder(configs, voting='soft'):
@@ -307,21 +307,21 @@ class Experiment(object):
         self.sc = sc
         self.parallel = parallel
 
-    def add_config(self, classifier_config):
+    def add_estimator(self, classifier_config):
         self.configs.append(classifier_config)
 
-    def add_features_source(self, features_source):
+    def add_features(self, features_source):
         self.features_sources.append(features_source)
 
-    def make_source(self, *args, **kwargs):
-        fs = FeaturesSource(*args, **kwargs)
-        self.add_features_source(fs)
+    def make_features(self, *args, **kwargs):
+        fs = Features(*args, **kwargs)
+        self.add_features(fs)
         return fs
 
     @staticmethod
     def _par_grid_search(config, feature_source, cv, sc, f_sel_threshold, strategy, verbose=True):
 
-        f_sel_threshold = feature_source.set_reducer_threshold(f_sel_threshold)
+        f_sel_threshold = feature_source.set_selector_threshold(f_sel_threshold)
         X_train, y_train, feature_names, sel_feature_names = feature_source.build_Xy()
         best_model, best_params = Experiment.grid_search_cv(config, X_train, y_train, cv, sc,
                                                             strategy)
@@ -442,7 +442,6 @@ class Experiment(object):
                 cfg_df['Features'] = [key] * len(values)
                 cfg_df['Config'] = [c.name] * len(values)
                 results_df = pd.concat([results_df, cfg_df])
-        results_df.to_csv('cv_results.csv', index=False)
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
                            size=size, legend_out=True)
         g.set_xticklabels(rotation=25)

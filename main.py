@@ -1,7 +1,23 @@
+try:
+    import matplotlib
+    import sys
+
+    matplotlib.use('TkAgg' if 'darwin' in sys.platform else 'Agg')
+    import matplotlib.pyplot as plt
+except Exception as ex:
+    print(ex)
+    print("Matplotlib unavailable")
+
 import os
 import pandas as pd
+import numpy as np
+
+from sklearn.feature_selection import SelectFromModel
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeClassifier
 
 from hallucinate import *
+
 
 class Transforms(object):
     @staticmethod
@@ -37,10 +53,10 @@ class Transforms(object):
     @staticmethod
     def predict_age(df):
         feats = ['Pclass', 'Sex', 'FareC', 'Ticket', 'Title']
-        fs = FeaturesSource(feats,
-                            target='Age',
-                            train_data=pd.DataFrame(df[~df['Age'].isnull()].copy()),
-                            test_data=pd.DataFrame(df[df['Age'].isnull()].copy()))
+        fs = Features(feats,
+                      target='Age',
+                      train_data=pd.DataFrame(df[~df['Age'].isnull()].copy()),
+                      test_data=pd.DataFrame(df[df['Age'].isnull()].copy()))
         fs.transform(['Pclass', 'Ticket', 'Title'], 'onehot')
         X_train = fs.preprocess().values
         y_train = df[~df['Age'].isnull()]['Age'].values
@@ -50,8 +66,6 @@ class Transforms(object):
         y_pred = regressor.predict(X_pred)
         df.ix[df['Age'].isnull(), 'Age'] = y_pred.astype(int)
         return df['Age']
-
-
 
 
 def create_submission(experiment, train_fs):
@@ -90,7 +104,6 @@ def create_submission(experiment, train_fs):
         print('\nPrediction correlations:\n')
         all_predictions['REAL'] = pd.read_csv('titanic/test_complete.csv')['Survived'].values
         tmp = pd.DataFrame(all_predictions)
-        tmp.to_csv('all_predictions.csv', index=False)
         print(tmp.corr()[tmp.corr()['REAL'] > 0.52]['REAL'].sort_values(ascending=False))
         print('-- Wrote predictions including the real values in all_predictions.csv')
 
@@ -102,14 +115,14 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
                 'AgeD', 'FamilySize', 'SibSp', 'Parch', 'Single', 'SmallFamily', 'LargeFamily',
                 'Cabin', 'Embarked', 'Title', 'Surname', 'Ticket', 'AgeFareRatio^2', 'FareD2']
 
-    t1 = exp.make_source(features, name='All', train_data=train_df, test_data=test_df,
-                         target='Survived')
+    t1 = exp.make_features(features, name='All', train_data=train_df, test_data=test_df,
+                           target='Survived')
 
     # t1.set_dim_reducer(KernelPCA(n_components=60, kernel='rbf'))
     # t1.set_dim_reducer(SelectFromModel(XGBClassifier(nthread=1), threshold=0.001))
     # t1.set_dim_reducer(SelectFromModel(LGBMClassifier(nthread=1), threshold=0.005))
     # t1.set_dim_reducer(SelectFromModel(LogisticRegression(n_jobs=1), threshold=0.15))
-    t1.set_dim_reducer(
+    t1.set_feature_selector(
         SelectFromModel(DecisionTreeClassifier(random_state=7, max_depth=12), threshold=0.0005))
 
     t1.transform(['Fare'], 'fillna', strategy='mean')
@@ -170,12 +183,12 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'log')
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'std')
 
-    # exp.add_config(ClassifierConfig(DecisionTreeClassifier(), {}, 'DTR'))
-    # exp.add_config(ClassifierConfig(XGBClassifier(nthread=1), {}, 'XGB'))
-    exp.add_config(ClassifierConfig(LGBMClassifier(nthread=1), {}, 'LGB'))
-    # exp.add_config(ClassifierConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
-    # exp.add_config(ClassifierConfig(KNeighborsClassifier(n_jobs=1), {}, 'KNN'))
-    # exp.add_config(ClassifierConfig(VotingBuilder(exp.non_stacking_configs()), {}, 'VOT',
+    exp.add_estimator(EstimatorConfig(DecisionTreeClassifier(), {}, 'DTR'))
+    # exp.add_estimator(EstimatorConfig(XGBClassifier(nthread=1), {}, 'XGB'))
+    # exp.add_estimator(EstimatorConfig(LGBMClassifier(nthread=1), {}, 'LGB'))
+    # exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
+    # exp.add_estimator(EstimatorConfig(KNeighborsClassifier(n_jobs=1), {}, 'KNN'))
+    # exp.add_estimator(EstimatorConfig(VotingBuilder(exp.non_stacking_configs()), {}, 'VOT',
     #                                 stacking=True))
 
     return exp, t1
@@ -211,7 +224,7 @@ if __name__ == '__main__':
     # print(exp2.features_sources[0].preprocess(include_one_hot=False).head())
     exp2.show_all_null_stats(preprocess=True)
     exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
-    print('Best run: \n\n{}'.format(exp2.find_best_run('LGB')))
+    print('Best run: \n\n{}'.format(exp2.find_best_run('DTR')))
     create_submission(exp2, t2)
     exp2.plot_cv_runs()
     exp2.plot_f_sel_learning_curve()
