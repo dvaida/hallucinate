@@ -460,8 +460,6 @@ class Experiment(object):
                 cfg_df['Features'] = [key] * len(values)
                 cfg_df['Config'] = [c.name] * len(values)
                 results_df = pd.concat([results_df, cfg_df])
-        # print(results_df)
-        results_df.to_csv('cv_results.csv', index=False)
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, size=7,
                            legend_out=True)
         g.set_xticklabels(rotation=25)
