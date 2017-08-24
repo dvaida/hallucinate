@@ -103,7 +103,7 @@ class Features(object):
             raise Exception('The first features source in the experiment must specify a target')
 
         if not self.name:
-            self.name = '+'.join([a[:2] for a in self._features_including_parents()])
+            self.name = '+'.join([a for a in self._features_including_parents()])
 
     def set_feature_selector(self, reducer):
         self.feature_selectors.clear()
@@ -132,12 +132,12 @@ class Features(object):
         # print('Reducer threshold set to: {}'.format(new_value))
         return reducer.threshold
 
-    def build_Xy(self):
+    def build_Xy(self, warnings=True):
         if self.target is None:
             raise Exception(
                 'Specify a target column in the training data set')
         y = self._train_data[self.target].values[: self.training_test_threshold]
-        X, feature_names, selected_feature_names = self.build_X()
+        X, feature_names, selected_feature_names = self.build_X(warnings=warnings)
 
         for reducer in self.feature_selectors:
             if not self.fit_reducers.get(reducer):
@@ -147,11 +147,12 @@ class Features(object):
 
         return X, y, feature_names, selected_feature_names
 
-    def build_X(self, for_test=False):
+    def build_X(self, for_test=False, warnings=True):
         work_df = self.preprocess(for_test)
-        for feature in work_df.columns:
-            if work_df[feature].isnull().sum() > 0:
-                print(' !!! WARNING !!! {} has null values'.format(feature))
+        if warnings:
+            for feature in work_df.columns:
+                if work_df[feature].isnull().sum() > 0:
+                    print(' !!! WARNING !!! {} has null values'.format(feature))
         X = work_df.values
         feature_names = work_df.columns.values
         selected_feature_names = feature_names
@@ -199,7 +200,7 @@ class Features(object):
         return self._test_data is not None
 
     @staticmethod
-    def _stripped_array_representation(arr, limit=7):
+    def _stripped_array_representation(arr, limit=5):
         if len(arr) > limit:
             return '{} -> {} and {} others'.format(len(arr),
                                                    ', '.join([str(a) for a in arr[:limit]]),
@@ -224,10 +225,11 @@ class Features(object):
         return '  - {}{}: {}'.format(feature_name, missing_percent,
                                      self._stripped_array_representation(unique_values, limit))
 
-    def overview(self, verbose):
-        l = 1000000 if verbose else 7
+    def overview(self, verbose=False):
+        l = 1000000 if verbose else 5
         features_before_preproc = self._stripped_array_representation(self.features, l)
-        _, _, _, selected_features = self.build_Xy()  # Pre-process does not include dim reduction
+        _, _, _, selected_features = self.build_Xy(
+            warnings=False)  # Pre-process does not include dim reduction
         features_after_preproc = self._stripped_array_representation(selected_features, l)
         categorical_features = self._stripped_array_representation(self.categorical_features(), l)
         numerical_features = self._stripped_array_representation(self.numerical_features(), l)
@@ -277,7 +279,7 @@ class Features(object):
 
     def _features_including_parents(self):
         p_features = self.parent._features_including_parents() if self.parent else []
-        return [a for a in (p_features + self.features) if a != self.target]
+        return [a for a in (p_features + list(self.features)) if a != self.target]
 
     def _transformations_including_parents(self):
         tfs = self.parent._transformations_including_parents() if self.parent else []
@@ -340,9 +342,9 @@ class Experiment(object):
                                                                 X_test)
         if verbose:
             print(
-                'o {}: {:.2f}%, std: {:.2f} (features: {}/{}) {}\n'.format(
-                    config.name, np.mean(results) * 100, np.std(results), len(sel_feature_names),
-                    len(feature_names), best_params))
+                'o {}: mean: {:.4f}, std: {:.2f} ({}: {}/{}), best params: {}\n'.format(
+                    config.name, np.mean(results), np.std(results), feature_source.name,
+                    len(sel_feature_names), len(feature_names), best_params))
 
         return (config, best_model, best_params, feature_source, f_sel_threshold, results,
                 prediction_results)
@@ -428,9 +430,6 @@ class Experiment(object):
         else:
             raise Exception('Implement worst, random etc.')
 
-    def build_chart_title(self):
-        return "{}, cv shuffled: {}".format(self.name, self.cv_shuffle)
-
     def overview(self, verbose=0):
         print('\nExperiment: \'{}\'\n{}'.format(self.name, '\n\n'.join(
             [fs.overview(verbose) for fs in self.features_sources])))
@@ -451,7 +450,9 @@ class Experiment(object):
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
                            size=size, legend_out=True)
         g.set_xticklabels(rotation=25)
-        plt.title(self.build_chart_title())
+        title = "Accuracy distribution over {} CV runs, cv shuffled: {}".format(self.cv.n_splits,
+                                                                                self.cv_shuffle)
+        plt.title(title)
 
     def plot_f_sel_learning_curve(self):
         results_df = pd.DataFrame()
@@ -471,21 +472,21 @@ class Experiment(object):
         g.set_xticklabels(rotation=25)
         plt.title(self.build_chart_title())
 
-    def show_all_null_stats(self, preprocess=False):
+    def show_null_stats(self, preprocess=False):
         for fs in self.features_sources:
             train_data = fs.preprocess() if preprocess else fs.get_train_data()
             if fs.target in train_data.columns:
                 train_data = train_data.drop([fs.target], axis=1)
-            self.show_null_stats(train_data, '{} Training / {}'.format(self.name, fs.name))
+            self.show_null_stats_for(train_data, '{} Training / {}'.format(self.name, fs.name))
 
             if fs.has_test_data():
                 test_data = fs.preprocess(for_test=True) if preprocess else fs.get_test_data()
                 if fs.target in test_data.columns:
                     test_data = test_data.drop(fs.target, axis=1)
-                self.show_null_stats(test_data, '{} Test / {}'.format(self.name, fs.name))
+                self.show_null_stats_for(test_data, '{} Test / {}'.format(self.name, fs.name))
 
     @staticmethod
-    def show_null_stats(df, name=None):
+    def show_null_stats_for(df, name=None):
         nulls = pd.DataFrame({'Empty': df.isnull().sum()})
         counts = pd.DataFrame({'Empty': df.isnull().count()})
         if nulls[nulls['Empty'] > 0].empty:

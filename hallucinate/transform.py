@@ -41,15 +41,15 @@ class OneHotTransformation(Transformation):
 
 
 class MethodTransformation(Transformation):
-    def __init__(self, feature_names, processor_handle, from_=None):
+    def __init__(self, feature_names, method_handle, from_=None):
         super().__init__(feature_names, from_)
-        self.processor_handle = processor_handle
+        self.method_handle = method_handle
 
     def _internal_apply_to(self, source_df):
         for idx, feature in enumerate(self.feature_names):
             from_feature = self.from_[idx]
-            if self.processor_handle:
-                source_df[feature] = self.processor_handle(source_df)
+            if self.method_handle:
+                source_df[feature] = self.method_handle(source_df)
             else:
                 # Just duplicate
                 source_df[feature] = source_df[from_feature]
@@ -76,10 +76,10 @@ class MathTransformation(MethodTransformation):
             starter = source_df[to_multiply[0]]
             for n in [a.strip() for a in to_multiply[1:]]:
                 if n in source_df.columns:
-                    starter = self.processor_handle(starter, source_df[n])
+                    starter = self.method_handle(starter, source_df[n])
                 else:
                     # TODO HUGE WARNING HERE - use an eval library here
-                    starter = self.processor_handle(starter, eval(n))
+                    starter = self.method_handle(starter, eval(n))
             source_df[feature] = starter
         return source_df
 

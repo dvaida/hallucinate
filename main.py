@@ -130,7 +130,7 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
 
     t1.transform(['Pclass'], 'onehot')
     t1.transform(['Sex'], 'map', mapping={'male': 0, 'female': 1})
-    t1.transform(['FareC'], 'method', from_=['Fare'], processor_handle=None)
+    t1.transform(['FareC'], 'method', from_=['Fare'], method_handle=None)
 
     t1.transform(['FareD'], 'discretize', from_=['Fare'], values_range=[-0.1, 10, 30])
     t1.transform(['FareD'], 'onehot')
@@ -149,27 +149,27 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
                  mapping={1: 0, 2: 0, 3: 0, 4: 0, '_others': 1})
 
     t1.transform(['Cabin'], 'fillna', strategy='value', value='_')
-    t1.transform(['Cabin'], 'method', processor_handle=Transforms.extract_cabin)
+    t1.transform(['Cabin'], 'method', method_handle=Transforms.extract_cabin)
     t1.transform(['Cabin'], 'onehot')
 
-    t1.transform(['Title'], 'method', from_=['Name'], processor_handle=Transforms.extract_title)
+    t1.transform(['Title'], 'method', from_=['Name'], method_handle=Transforms.extract_title)
     t1.transform(['Title'], 'onehot')
 
     t1.transform(['FarePerPerson'], '/', from_=['Fare,FamilySize'])
     t1.transform(['FarePerPerson^2'], '*', from_=['FarePerPerson,FarePerPerson'])
 
     t1.transform(['Surname'], 'method', from_=['Name,FamilySize'],
-                 processor_handle=Transforms.extract_surname)
+                 method_handle=Transforms.extract_surname)
     t1.transform(['Surname'], 'onehot')
 
     t1.transform(['Ticket'], 'method', from_=['Ticket'],
-                 processor_handle=Transforms.extract_ticket)
+                 method_handle=Transforms.extract_ticket)
     t1.transform(['Ticket'], 'onehot')
 
     t1.transform(['Embarked'], 'fillna', strategy='value', value='C')
     t1.transform(['Embarked'], 'onehot')
 
-    # t1.transform(['Age'], 'method', processor_handle=Transforms.predict_age)
+    # t1.transform(['Age'], 'method', method_handle=Transforms.predict_age)
     t1.transform(['Age'], 'fillna', strategy='median')
 
     t1.transform(['TmpFare'], 'fillna', from_=['Fare'], strategy='mean')
