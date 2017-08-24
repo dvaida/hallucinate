@@ -207,13 +207,18 @@ class Features(object):
         else:
             return '{} -> {}'.format(len(arr), ', '.join([str(a) for a in arr]))
 
-    def _feature_overview(self, df, feature_name, limit=10):
+    def _feature_overview(self, df, feature_name, limit=10, is_numeric=False):
         null_count = df.isnull()[feature_name].sum()
         all_count = df.isnull()[feature_name].count()
         has_nulls = null_count > 0
         unique_values = df.groupby(feature_name)[feature_name].apply(lambda x: len(x.values))
         unique_values = unique_values.sort_values(ascending=False)
-        unique_values = ['{} ({})'.format(f, unique_values[f]) for f in unique_values.index.values]
+        if is_numeric:
+            unique_values = ['{:.2f} ({})'.format(float(f), unique_values[f]) for f in
+                             unique_values.index.values]
+        else:
+            unique_values = ['{} ({})'.format(f, unique_values[f]) for f in
+                             unique_values.index.values]
         missing_percent = ' ({:.2f}% missing)'.format(
             null_count * 100 / all_count) if has_nulls else ''
         return '  - {}{}: {}'.format(feature_name, missing_percent,
@@ -249,7 +254,8 @@ class Features(object):
                          self.categorical_features()]),
                     numerical_features,
                     '\n'.join(
-                        [self._feature_overview(tr_data, f, l) for f in self.numerical_features()]),
+                        [self._feature_overview(tr_data, f, l, is_numeric=True) for f in
+                         self.numerical_features()]),
                     features_before_preproc,
                     features_after_preproc)
         return tmp
