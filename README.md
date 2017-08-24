@@ -7,7 +7,7 @@ Head over [here](https://github.com/dvaida/hallucinate/blob/master/Teaser.ipynb)
 ```python
 train_df = pd.read_csv('titanic/train.csv')
 test_df = pd.read_csv('titanic/test.csv')
-feature_names = train_df.drop(['PassengerId', 'Survived', 'Name', 'Ticket'], 1).columns.values.tolist()
+feature_names = train_df.drop(['PassengerId', 'Survived', 'Name', 'Ticket'], 1).columns.values
 experiment = hl.Experiment(name='Titanic', cv=30, sc='accuracy', cv_shuffle=False, parallel=True)
 features = experiment.make_features(name='Default Features',
                                     features=feature_names,
