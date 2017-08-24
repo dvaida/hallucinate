@@ -199,7 +199,7 @@ class Features(object):
         return self._test_data is not None
 
     @staticmethod
-    def _stripped_array_representation(arr, limit=15):
+    def _stripped_array_representation(arr, limit=7):
         if len(arr) > limit:
             return '{} -> {} and {} others'.format(len(arr),
                                                    ', '.join([str(a) for a in arr[:limit]]),
@@ -220,7 +220,7 @@ class Features(object):
                                      self._stripped_array_representation(unique_values, limit))
 
     def overview(self, verbose):
-        l = 1000000 if verbose else 15
+        l = 1000000 if verbose else 7
         features_before_preproc = self._stripped_array_representation(self.features, l)
         _, _, _, selected_features = self.build_Xy()  # Pre-process does not include dim reduction
         features_after_preproc = self._stripped_array_representation(selected_features, l)
