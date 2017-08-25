@@ -229,4 +229,5 @@ if __name__ == '__main__':
     exp2.plot_cv_runs()
     # exp2.plot_f_sel_learning_curve()
     exp2.plot_feature_importance()
+    exp2.plot_correlations()
     plt.show()

@@ -453,8 +453,8 @@ class Experiment(object):
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
                            size=figsize, legend_out=True)
         g.set_xticklabels(rotation=25)
-        title = "Accuracy distribution over {} CV runs, cv shuffled: {}".format(self.cv.n_splits,
-                                                                                self.cv_shuffle)
+        title = "Accuracy distribution over {} CV runs, cv shuffled: {}\n".format(self.cv.n_splits,
+                                                                                  self.cv_shuffle)
         plt.title(title)
 
     def plot_f_sel_learning_curve(self):
@@ -473,8 +473,7 @@ class Experiment(object):
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, size=7,
                            legend_out=True)
         g.set_xticklabels(rotation=25)
-        title = "Accuracy vs feature selection threshold"
-        plt.title(title)
+        plt.title("Accuracy vs feature selection threshold\n")
 
     def plot_feature_importance(self, limit=15, figsize=7):
         importance_df = pd.DataFrame()
@@ -502,6 +501,21 @@ class Experiment(object):
                            data=importance_df.sort_values(by=['Importance'], ascending=False),
                            kind='bar', size=figsize)
         g.set_xticklabels(rotation=75)
+
+    def plot_correlations(self, top_n=15, figsize=7):
+        plt.figure(figsize=(1.1 * figsize, figsize))
+        for fs in self.features_sources:
+            df = fs.preprocess()
+            X, y, _, _ = fs.build_Xy()
+            df = pd.concat([df, pd.DataFrame(y, columns=[fs.target])], axis=1)
+            cols = df.corr().nlargest(top_n, fs.target)[fs.target].index
+            cm = np.corrcoef(df[cols].values.T)
+            sns.set(font_scale=1.2)
+            g = sns.heatmap(cm, cbar=True, annot=True, fmt='.2f', annot_kws={'size': 10},
+                            yticklabels=cols.values, xticklabels=cols.values)
+            plt.yticks(rotation=0)
+            plt.xticks(rotation=90)
+            plt.title('\'{}\', top {} highest correlations\n'.format(fs.name, top_n))
 
     def show_null_stats(self, preprocess=False):
         for fs in self.features_sources:
@@ -533,7 +547,7 @@ class Experiment(object):
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
         postfix = '' if not name else ' ({})'.format(name)
-        plt.title('Null / NA Counts{}'.format(postfix))
+        plt.title('Null / NA Counts{}\n'.format(postfix))
         plt.xticks(rotation=75)
         # plt.yticks([])
         ax.grid(False)
