@@ -1,8 +1,5 @@
 try:
     import matplotlib
-    import sys
-
-    matplotlib.use('TkAgg' if 'darwin' in sys.platform else 'Agg')
     import matplotlib.pyplot as plt
 except Exception as ex:
     print(ex)
@@ -412,6 +409,12 @@ class Experiment(object):
     def find_model(self, config_name, feature_source_name=None):
         return self.find_run(config_name, feature_source_name).best_model
 
+    def find_features(self, features_name):
+        for f in self.features_sources:
+            if f.name == features_name:
+                return f
+        return None
+
     @staticmethod
     def grid_search_cv(config, X_train, y_train, cv, sc, strategy='best'):
 
@@ -434,7 +437,7 @@ class Experiment(object):
         print('\nExperiment: \'{}\'\n{}'.format(self.name, '\n\n'.join(
             [fs.overview(verbose) for fs in self.features_sources])))
 
-    def plot_cv_runs(self, size=7):
+    def plot_cv_runs(self, figsize=7):
         results_df = pd.DataFrame()
         sorted_configs = self.configs  # in case we want a different sorting
         for c in sorted_configs:
@@ -448,7 +451,7 @@ class Experiment(object):
                 cfg_df['Config'] = [c.name] * len(values)
                 results_df = pd.concat([results_df, cfg_df])
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
-                           size=size, legend_out=True)
+                           size=figsize, legend_out=True)
         g.set_xticklabels(rotation=25)
         title = "Accuracy distribution over {} CV runs, cv shuffled: {}".format(self.cv.n_splits,
                                                                                 self.cv_shuffle)
@@ -470,7 +473,35 @@ class Experiment(object):
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, size=7,
                            legend_out=True)
         g.set_xticklabels(rotation=25)
-        plt.title(self.build_chart_title())
+        title = "Accuracy vs feature selection threshold"
+        plt.title(title)
+
+    def plot_feature_importance(self, limit=15, figsize=7):
+        importance_df = pd.DataFrame()
+        for config_name, runs in self.runs.items():
+            for run in runs:
+                model = run.best_model
+                features = self.find_features(run.feature_source_name)
+                X, y, f_names, selected_f_names = features.build_Xy()
+                model.fit(X, y)
+                imps = model.feature_importances_
+                if max(imps) > 1:
+                    print(' !!! WARNING !!! {} was scaled to 0.5 for better visualization'.format(
+                        config_name))
+                    imps = np.asarray(imps) / (2 * np.max(np.asarray(imps), axis=0))
+                features_source_name = run.feature_source_name if not limit else '{} (limit: {})'.format(
+                    run.feature_source_name, limit)
+                local = pd.DataFrame({'Feature': selected_f_names, 'Importance': imps,
+                                      'Estimator': [config_name] * len(selected_f_names),
+                                      'Features': [features_source_name] * len(
+                                          selected_f_names)})
+                if limit:
+                    local = local.sort_values(by='Importance', ascending=False).iloc[:limit, :]
+                importance_df = pd.concat([importance_df, local])
+        g = sns.factorplot(x='Feature', y='Importance', col='Features', hue='Estimator',
+                           data=importance_df.sort_values(by=['Importance'], ascending=False),
+                           kind='bar', size=figsize)
+        g.set_xticklabels(rotation=75)
 
     def show_null_stats(self, preprocess=False):
         for fs in self.features_sources:
