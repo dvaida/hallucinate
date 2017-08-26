@@ -8,17 +8,15 @@ except Exception as ex:
     print(ex)
     print("Matplotlib unavailable")
 
-import os
 import pandas as pd
-import numpy as np
 
 from sklearn.feature_selection import SelectFromModel
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score
 
-from hallucinate import *
+from hallucinate import Experiment, EstimatorConfig, Features, Kaggle
 
 
 class Transforms(object):
@@ -152,14 +150,7 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'log')
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'std')
 
-    exp.add_estimator(EstimatorConfig(DecisionTreeClassifier(), {}, 'DTR'))
-    # exp.add_estimator(EstimatorConfig(XGBClassifier(nthread=1), {}, 'XGB'))
-    # exp.add_estimator(EstimatorConfig(LGBMClassifier(nthread=1), {}, 'LGB'))
-    exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
-    # exp.add_estimator(EstimatorConfig(KNeighborsClassifier(n_jobs=1), {}, 'KNN'))
-    exp.add_estimator(EstimatorConfig(GaussianNB(), {}, 'GNB'))
-    # exp.add_estimator(EstimatorConfig(VotingBuilder(exp.non_stacking_configs()), {}, 'VOT',
-    #                                 stacking=True))
+    exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LRE'))
 
     return exp, bare_features
 
@@ -173,7 +164,6 @@ if __name__ == '__main__':
     test_complete_df['Survived'] = test_complete_df['Survived'].astype(int)
 
     cv_shuffle = False
-    # dtr_f_sel_thresholds = [0.0005 + a * 0.0005 for a in range(15)]
     dtr_f_sel_thresholds = [0.0005 + a * 0.0005 for a in range(5)]
     # TODO logistic regression will hang in parallel mode if going <= 0.15 with the threshold
     # Only thing I can correlate with is the training set size. If big, it fucks up silently / hangs
@@ -181,22 +171,10 @@ if __name__ == '__main__':
     xgb_f_sel_thresholds = [0.0005 + a * 0.0005 for a in range(8)]
     lgb_f_sel_thresholds = [0.005 + a * 0.005 for a in range(5)]
     print(['{:g}'.format(a) for a in dtr_f_sel_thresholds])
-    # exp1, t1 = build_all_experiment('Complete', pd.concat([train_df, test_complete_df]), None,
-    #                                 cv_shuffle=cv_shuffle)
-    # exp1.show_all_null_stats()
-    # plt.show()
-    # exp1.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
-    # # exp1.plot_results2()
-    # exp1.plot_f_sel_learning_curve()
 
     exp2, t2 = build_all_experiment('Kaggle', train_df, test_df, cv_shuffle=cv_shuffle)
     exp2.overview(verbose=0)
-    # print(exp2.features_sources[0].preprocess(include_one_hot=False).head())
-    # exp2.show_null_stats(preprocess=True)
-    # exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
-    exp2.grid_search_all()
-    print('Best run: \n\n{}'.format(exp2.find_best_run('LR')))
-    # create_submission(exp2, t2)
+    exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
     kaggle = Kaggle(exp2, 'PassengerId')
     submissions = kaggle.create_submissions()
     submissions = pd.concat([submissions, pd.read_csv('titanic/test_complete.csv')[['Survived']]],
@@ -204,6 +182,13 @@ if __name__ == '__main__':
     print('Correlations with real values:\n')
     print(submissions.corr()[submissions.corr()['Survived'] > 0.5]['Survived'].sort_values(
         ascending=False))
+    print('\nReal accuracies:\n')
+    accuracies = []
+    for column in submissions.columns:
+        accuracies.append((column, accuracy_score(submissions['Survived'], submissions[column])))
+    accuracies = sorted(accuracies, key=lambda x: x[1], reverse=True)
+    for acc in accuracies[:10]:
+        print('{}: {:.4f}'.format(acc[0], acc[1]))
     exp2.plot_cv_runs()
     exp2.plot_f_sel_learning_curve()
     exp2.plot_feature_importance()
