@@ -510,8 +510,10 @@ class Experiment(object):
                            kind='bar', size=figsize)
         g.set_xticklabels(rotation=75)
 
-    def plot_correlations(self, top_n=15, figsize=7):
+    def plot_correlations(self, top_n=15, figsize=7, features=None):
         for fs in self.features_sources:
+            if features and fs.name != features:
+                continue
             plt.figure(figsize=(1.1 * figsize, figsize))
             df = fs.preprocess()
             X, y, _, _ = fs.build_Xy()
