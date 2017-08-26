@@ -8,9 +8,7 @@ except Exception as ex:
     print(ex)
     print("Matplotlib unavailable")
 
-import os
 import pandas as pd
-import numpy as np
 
 from sklearn.feature_selection import SelectFromModel
 from sklearn.svm import SVR
