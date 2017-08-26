@@ -15,6 +15,8 @@ import numpy as np
 from sklearn.feature_selection import SelectFromModel
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 
 from hallucinate import *
 
@@ -68,117 +70,84 @@ class Transforms(object):
         return df['Age']
 
 
-def create_submission(experiment, train_fs):
-    print(' -- Creating submissions...\n')
-    os.makedirs('submissions', exist_ok=True)
-
-    all_predictions = {}
-
-    for config in experiment.configs:
-        cv_runs = []
-        for run in experiment.runs[config.name]:
-            cv_runs.append(run.prediction_results)
-            model = run.best_model
-            fs_name = run.key()
-            train_fs.feature_selector = None
-            X, y, features, sel_features = train_fs.build_Xy()
-            model.fit(X, y)
-            # We need to copy after fitting, in case we have a feature selector
-            X_test, features, sel_features = train_fs.build_X(for_test=True)
-            predictions = model.predict(X_test)
-            all_predictions['{}_{}'.format(config.name, fs_name)] = predictions
-            pd.concat([train_fs.get_test_data()['PassengerId'],
-                       pd.Series(predictions.astype(int), name='Survived')], axis=1).to_csv(
-                'submissions/submission_{}_{}.csv'.format(config.name, fs_name), index=False)
-        stk = np.asarray(cv_runs)
-        stk = stk.reshape((stk.shape[0] * stk.shape[1], stk.shape[2]))
-        stk = np.mean(stk, axis=0)
-        all_predictions['{}_STK'.format(config.name)] = [int(z) for z in stk]
-        pd.concat([train_fs.get_test_data()['PassengerId'],
-                   pd.Series(stk.astype(int), name='Survived')], axis=1).to_csv(
-            'submissions/submission_{}_{}.csv'.format(config.name, 'STK'), index=False)
-        # print('{}: {}'.format(config.name, stk.shape))
-    print(' -- Done creating submissions.\n')
-
-    if len(all_predictions) > 1:
-        print('\nPrediction correlations:\n')
-        all_predictions['REAL'] = pd.read_csv('titanic/test_complete.csv')['Survived'].values
-        tmp = pd.DataFrame(all_predictions)
-        print(tmp.corr()[tmp.corr()['REAL'] > 0.52]['REAL'].sort_values(ascending=False))
-        print('-- Wrote predictions including the real values in all_predictions.csv')
-
-
 def build_all_experiment(name, train_df, test_df, cv_shuffle):
     exp = Experiment(name=name, cv=30, cv_shuffle=cv_shuffle, sc='accuracy', parallel=True)
 
-    features = ['Pclass', 'Sex', 'FareC', 'FareD', 'Fare^2', 'AgeFareRatio', 'FarePerPerson',
-                'AgeD', 'FamilySize', 'SibSp', 'Parch', 'Single', 'SmallFamily', 'LargeFamily',
-                'Cabin', 'Embarked', 'Title', 'Surname', 'Ticket', 'AgeFareRatio^2', 'FareD2']
+    bare_feature_names = ['Pclass', 'Sex', 'Fare', 'SibSp', 'Parch', 'Cabin', 'Embarked', 'Title',
+                          'Ticket']
+    hallucinated_feature_names = ['Fare^2', 'AgeFareRatio', 'FarePerPerson', 'FamilySize', 'Single',
+                                  'SmallFamily', 'LargeFamily', 'AgeFareRatio^2', 'FareD', 'FareD2',
+                                  'FarePerPerson^2', 'Surname', 'AgeD']
 
-    t1 = exp.make_features(features, name='All', train_data=train_df, test_data=test_df,
-                           target='Survived')
+    bare_features = exp.make_features(bare_feature_names, name='Bare Features', train_data=train_df,
+                                      test_data=test_df, target='Survived')
 
-    # t1.set_dim_reducer(KernelPCA(n_components=60, kernel='rbf'))
-    # t1.set_dim_reducer(SelectFromModel(XGBClassifier(nthread=1), threshold=0.001))
-    # t1.set_dim_reducer(SelectFromModel(LGBMClassifier(nthread=1), threshold=0.005))
-    # t1.set_dim_reducer(SelectFromModel(LogisticRegression(n_jobs=1), threshold=0.15))
-    t1.set_feature_selector(
+    hallucinated_features = exp.make_features(hallucinated_feature_names,
+                                              name='Hallucinated', train_data=train_df,
+                                              test_data=test_df, parent=bare_features,
+                                              target='Survived')
+
+    bare_features.set_feature_selector(
+        SelectFromModel(DecisionTreeClassifier(random_state=7, max_depth=12), threshold=0.0005))
+    hallucinated_features.set_feature_selector(
         SelectFromModel(DecisionTreeClassifier(random_state=7, max_depth=12), threshold=0.0005))
 
-    t1.transform(['Fare'], 'fillna', strategy='mean')
-    # t1.transform(['Age'], 'fillna', strategy='median')
+    bare_features.transform(['Pclass'], 'onehot')
+    bare_features.transform(['Sex'], 'map', mapping={'male': 0, 'female': 1})
+    bare_features.transform(['Fare'], 'fillna', strategy='mean')
 
-    t1.transform(['Pclass'], 'onehot')
-    t1.transform(['Sex'], 'map', mapping={'male': 0, 'female': 1})
-    t1.transform(['FareC'], 'method', from_=['Fare'], method_handle=None)
+    bare_features.transform(['Cabin'], 'fillna', strategy='value', value='XXX')
+    bare_features.transform(['Cabin'], 'method', method_handle=Transforms.extract_cabin)
+    bare_features.transform(['Cabin'], 'onehot')
 
-    t1.transform(['FareD'], 'discretize', from_=['Fare'], values_range=[-0.1, 10, 30])
-    t1.transform(['FareD'], 'onehot')
+    bare_features.transform(['Embarked'], 'fillna', strategy='value', value='S')
+    bare_features.transform(['Embarked'], 'onehot')
 
-    t1.transform(['FareD2'], 'discretize', from_=['Fare'], q=20)
-    t1.transform(['FareD2'], 'onehot')
+    bare_features.transform(['Title'], 'method', from_=['Name'],
+                            method_handle=Transforms.extract_title)
+    bare_features.transform(['Title'], 'onehot')
 
-    t1.transform(['Fare^2'], '*', from_=['Fare, Fare'])
+    bare_features.transform(['Ticket'], 'method', from_=['Ticket'],
+                            method_handle=Transforms.extract_ticket)
+    bare_features.transform(['Ticket'], 'onehot')
+
+    hallucinated_features.transform(['Fare'], 'fillna', strategy='mean')
+    hallucinated_features.transform(['FareD'], 'discretize', from_=['Fare'],
+                                    values_range=[-0.1, 10, 30])
+    hallucinated_features.transform(['FareD'], 'onehot')
+
+    hallucinated_features.transform(['FareD2'], 'discretize', from_=['Fare'], q=20)
+    hallucinated_features.transform(['FareD2'], 'onehot')
+
+    hallucinated_features.transform(['Fare^2'], '*', from_=['Fare, Fare'])
 
     # TODO this will look much better with an ExpressionTransform(expr='SibSp + Parch + 1')
-    t1.transform(['FamilySize'], '+', from_=['SibSp,Parch,1'])
-    t1.transform(['Single'], 'map', from_=['FamilySize'], mapping={1: 1, '_others': 0})
-    t1.transform(['SmallFamily'], 'map', from_=['FamilySize'],
-                 mapping={2: 1, 3: 1, 4: 1, '_others': 0})
-    t1.transform(['LargeFamily'], 'map', from_=['FamilySize'],
-                 mapping={1: 0, 2: 0, 3: 0, 4: 0, '_others': 1})
+    hallucinated_features.transform(['FamilySize'], '+', from_=['SibSp,Parch,1'])
+    hallucinated_features.transform(['Single'], 'map', from_=['FamilySize'],
+                                    mapping={1: 1, '_others': 0})
+    hallucinated_features.transform(['SmallFamily'], 'map', from_=['FamilySize'],
+                                    mapping={2: 1, 3: 1, 4: 1, '_others': 0})
+    hallucinated_features.transform(['LargeFamily'], 'map', from_=['FamilySize'],
+                                    mapping={1: 0, 2: 0, 3: 0, 4: 0, '_others': 1})
 
-    t1.transform(['Cabin'], 'fillna', strategy='value', value='_')
-    t1.transform(['Cabin'], 'method', method_handle=Transforms.extract_cabin)
-    t1.transform(['Cabin'], 'onehot')
-
-    t1.transform(['Title'], 'method', from_=['Name'], method_handle=Transforms.extract_title)
-    t1.transform(['Title'], 'onehot')
-
-    t1.transform(['FarePerPerson'], '/', from_=['Fare,FamilySize'])
-    t1.transform(['FarePerPerson^2'], '*', from_=['FarePerPerson,FarePerPerson'])
-
-    t1.transform(['Surname'], 'method', from_=['Name,FamilySize'],
-                 method_handle=Transforms.extract_surname)
-    t1.transform(['Surname'], 'onehot')
-
-    t1.transform(['Ticket'], 'method', from_=['Ticket'],
-                 method_handle=Transforms.extract_ticket)
-    t1.transform(['Ticket'], 'onehot')
-
-    t1.transform(['Embarked'], 'fillna', strategy='value', value='C')
-    t1.transform(['Embarked'], 'onehot')
+    hallucinated_features.transform(['FarePerPerson'], '/', from_=['Fare,FamilySize'])
+    hallucinated_features.transform(['FarePerPerson^2'], '*', from_=['FarePerPerson,FarePerPerson'])
 
     # t1.transform(['Age'], 'method', method_handle=Transforms.predict_age)
-    t1.transform(['Age'], 'fillna', strategy='median')
+    hallucinated_features.transform(['Age'], 'fillna', strategy='median')
 
-    t1.transform(['TmpFare'], 'fillna', from_=['Fare'], strategy='mean')
-    t1.transform(['TmpFare'], '+', from_=['TmpFare,0.1'])
-    t1.transform(['AgeFareRatio'], '/', from_=['Age,TmpFare'])
-    t1.transform(['AgeFareRatio^2'], '*', from_=['AgeFareRatio,AgeFareRatio'])
+    hallucinated_features.transform(['TmpFare'], 'fillna', from_=['Fare'], strategy='mean')
+    hallucinated_features.transform(['TmpFare'], '+', from_=['TmpFare,0.1'])
+    hallucinated_features.transform(['AgeFareRatio'], '/', from_=['Age,TmpFare'])
+    hallucinated_features.transform(['AgeFareRatio^2'], '*', from_=['AgeFareRatio,AgeFareRatio'])
 
-    t1.transform(['AgeD'], 'discretize', from_=['Age'], values_range=[0, 6, 13, 19, 25, 35, 60])
-    t1.transform(['AgeD'], 'onehot')
+    hallucinated_features.transform(['AgeD'], 'discretize', from_=['Age'],
+                                    values_range=[0, 6, 13, 19, 25, 35, 60])
+    hallucinated_features.transform(['AgeD'], 'onehot')
+
+    hallucinated_features.transform(['Surname'], 'method', from_=['Name,FamilySize'],
+                                    method_handle=Transforms.extract_surname)
+    hallucinated_features.transform(['Surname'], 'onehot')
 
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'log')
     # t1.transform(['FareC', 'Fare^2', 'AgeFareRatio', 'FarePerPerson'], 'std')
@@ -186,12 +155,13 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
     exp.add_estimator(EstimatorConfig(DecisionTreeClassifier(), {}, 'DTR'))
     # exp.add_estimator(EstimatorConfig(XGBClassifier(nthread=1), {}, 'XGB'))
     # exp.add_estimator(EstimatorConfig(LGBMClassifier(nthread=1), {}, 'LGB'))
-    # exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
+    exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
     # exp.add_estimator(EstimatorConfig(KNeighborsClassifier(n_jobs=1), {}, 'KNN'))
+    exp.add_estimator(EstimatorConfig(GaussianNB(), {}, 'GNB'))
     # exp.add_estimator(EstimatorConfig(VotingBuilder(exp.non_stacking_configs()), {}, 'VOT',
     #                                 stacking=True))
 
-    return exp, t1
+    return exp, bare_features
 
 
 if __name__ == '__main__':
@@ -223,11 +193,19 @@ if __name__ == '__main__':
     exp2.overview(verbose=0)
     # print(exp2.features_sources[0].preprocess(include_one_hot=False).head())
     # exp2.show_null_stats(preprocess=True)
-    exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
-    print('Best run: \n\n{}'.format(exp2.find_best_run('DTR')))
-    create_submission(exp2, t2)
+    # exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
+    exp2.grid_search_all()
+    print('Best run: \n\n{}'.format(exp2.find_best_run('LR')))
+    # create_submission(exp2, t2)
+    kaggle = Kaggle(exp2, 'PassengerId')
+    submissions = kaggle.create_submissions()
+    submissions = pd.concat([submissions, pd.read_csv('titanic/test_complete.csv')[['Survived']]],
+                            axis=1)
+    print('Correlations with real values:\n')
+    print(submissions.corr()[submissions.corr()['Survived'] > 0.5]['Survived'].sort_values(
+        ascending=False))
     exp2.plot_cv_runs()
-    # exp2.plot_f_sel_learning_curve()
+    exp2.plot_f_sel_learning_curve()
     exp2.plot_feature_importance()
     exp2.plot_correlations()
     plt.show()
