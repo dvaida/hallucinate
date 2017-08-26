@@ -15,6 +15,8 @@ import numpy as np
 from sklearn.feature_selection import SelectFromModel
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 
 from hallucinate import *
 
@@ -186,8 +188,9 @@ def build_all_experiment(name, train_df, test_df, cv_shuffle):
     exp.add_estimator(EstimatorConfig(DecisionTreeClassifier(), {}, 'DTR'))
     # exp.add_estimator(EstimatorConfig(XGBClassifier(nthread=1), {}, 'XGB'))
     # exp.add_estimator(EstimatorConfig(LGBMClassifier(nthread=1), {}, 'LGB'))
-    # exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
+    exp.add_estimator(EstimatorConfig(LogisticRegression(n_jobs=1), {}, 'LR'))
     # exp.add_estimator(EstimatorConfig(KNeighborsClassifier(n_jobs=1), {}, 'KNN'))
+    exp.add_estimator(EstimatorConfig(GaussianNB(), {}, 'GNB'))
     # exp.add_estimator(EstimatorConfig(VotingBuilder(exp.non_stacking_configs()), {}, 'VOT',
     #                                 stacking=True))
 
@@ -225,9 +228,16 @@ if __name__ == '__main__':
     # exp2.show_null_stats(preprocess=True)
     exp2.grid_search_all(f_sel_thresholds=dtr_f_sel_thresholds)
     print('Best run: \n\n{}'.format(exp2.find_best_run('DTR')))
-    create_submission(exp2, t2)
+    # create_submission(exp2, t2)
+    kaggle = Kaggle(exp2, 'PassengerId')
+    submissions = kaggle.create_submissions()
+    submissions = pd.concat([submissions, pd.read_csv('titanic/test_complete.csv')[['Survived']]],
+                            axis=1)
+    print('Correlations with real values')
+    print(submissions.corr()[submissions.corr()['Survived'] > 0.5]['Survived'].sort_values(
+        ascending=False))
     exp2.plot_cv_runs()
     # exp2.plot_f_sel_learning_curve()
-    exp2.plot_feature_importance()
+    # exp2.plot_feature_importance()
     exp2.plot_correlations()
     plt.show()

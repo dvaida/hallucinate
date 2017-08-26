@@ -3,7 +3,7 @@ try:
     import matplotlib.pyplot as plt
 except Exception as ex:
     print(ex)
-    print("Matplotlib unavailable")
+    print("Matplotlib unavailable...")
 
 try:
     import seaborn as sns

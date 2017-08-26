@@ -16,3 +16,4 @@ from .transform import DiscreteTransformation
 from .transform import LogTransformation
 from .transform import FillnaTransformation
 from .transform import StdTransformation
+from .kaggle import Kaggle
