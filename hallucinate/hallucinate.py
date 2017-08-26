@@ -161,7 +161,8 @@ class Features(object):
         return X, feature_names, selected_feature_names
 
     def preprocess(self, for_test=False, include_one_hot=True):
-        parent_df = pd.DataFrame() if not self.parent else self.parent.preprocess()
+        parent_df = pd.DataFrame() if not self.parent else self.parent.preprocess(for_test,
+                                                                                  include_one_hot)
         non_one_hot_transforms = [t for t in self.transformations if
                                   'OneHot' not in t.__class__.__name__]
         one_hot_transforms = [t for t in self.transformations if
@@ -177,11 +178,13 @@ class Features(object):
             for t in one_hot_transforms:
                 work_df = t.apply_to(work_df)
 
-        res = pd.concat([parent_df, work_df], axis=1)
+        # parent already has the desired shape
         if for_test:
-            res = res.iloc[self.training_test_threshold:, :]
+            work_df = work_df.iloc[self.training_test_threshold:, :]
         else:
-            res = res.iloc[:self.training_test_threshold, :]
+            work_df = work_df.iloc[:self.training_test_threshold, :]
+
+        res = pd.concat([parent_df, work_df], axis=1)
 
         return res
 
@@ -483,7 +486,12 @@ class Experiment(object):
                 features = self.find_features(run.feature_source_name)
                 X, y, f_names, selected_f_names = features.build_Xy()
                 model.fit(X, y)
-                imps = model.feature_importances_
+                if hasattr(model, 'coef_'):
+                    imps = model.coef_[0]  # TODO multiclass?
+                elif hasattr(model, 'feature_importances_'):
+                    imps = model.feature_importances_
+                else:
+                    imps = [0.] * len(selected_f_names)
                 if max(imps) > 1:
                     print(' !!! WARNING !!! {} was scaled to 0.5 for better visualization'.format(
                         config_name))
@@ -503,8 +511,8 @@ class Experiment(object):
         g.set_xticklabels(rotation=75)
 
     def plot_correlations(self, top_n=15, figsize=7):
-        plt.figure(figsize=(1.1 * figsize, figsize))
         for fs in self.features_sources:
+            plt.figure(figsize=(1.1 * figsize, figsize))
             df = fs.preprocess()
             X, y, _, _ = fs.build_Xy()
             df = pd.concat([df, pd.DataFrame(y, columns=[fs.target])], axis=1)
