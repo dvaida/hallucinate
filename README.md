@@ -36,7 +36,7 @@ experiment.plot_cv_runs()
 
 ### Complete Usage (until I get the docs done)
 
-```
+```python
 import pandas as pd
 from hallucinate import Experiment, EstimatorConfig, Kaggle
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
