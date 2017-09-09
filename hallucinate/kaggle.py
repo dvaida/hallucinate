@@ -10,9 +10,10 @@ class Kaggle(object):
         self.target_feature = target_feature
 
     def create_submissions(self, estimator_config_name=None, features_name=None,
-                           predictions_to_int=False):
+                           predictions_to_int=False, out_folder='.'):
         print('\n -- Creating submissions...\n')
-        os.makedirs('submissions', exist_ok=True)
+        if out_folder != '.':
+            os.makedirs(out_folder, exist_ok=True)
 
         all_predictions = {}
         all_cv_runs = []  # for voting on prediction results from ALL runs
@@ -51,22 +52,22 @@ class Kaggle(object):
                 submission = pd.concat([features.get_test_data()[self.index_feature],
                                         pd.Series(predictions.astype(int), name=target_feature)],
                                        axis=1)
-                out_file_name = 'submissions/submission_{}_{}.csv'.format(config.name,
+                out_file_name = '{}/submission_{}_{}.csv'.format(out_folder, config.name,
                                                                           submission_key)
                 submission.to_csv(out_file_name, index=False)
                 print(' -- Submission written to: \'{}\''.format(out_file_name))
 
             self._create_cv_voting_submission(config_cv_runs, config.name, latest_features,
-                                              target_feature, all_predictions)
+                                              target_feature, all_predictions, out_folder)
 
         self._create_cv_voting_submission(all_cv_runs, None, latest_features,
-                                          target_feature, all_predictions)
+                                          target_feature, all_predictions, out_folder)
 
         print('\n -- Done creating submissions.\n')
         return pd.DataFrame(all_predictions)
 
     def _create_cv_voting_submission(self, cv_run_predictions, config_name, latest_features,
-                                     target_feature, all_predictions):
+                                     target_feature, all_predictions, out_folder):
         config_name = config_name if config_name else 'GLB'  # global if None
         # Write a all CV runs voting prediction result
         vot = np.asarray(cv_run_predictions)
@@ -77,7 +78,7 @@ class Kaggle(object):
             all_predictions[voting_out_name] = predictions
             submission = pd.concat([latest_features.get_test_data()[self.index_feature],
                                     pd.Series(predictions, name=target_feature)], axis=1)
-            voting_out_file_name = 'submissions/submission_{}.csv'.format(voting_out_name)
+            voting_out_file_name = '{}/submission_{}.csv'.format(out_folder, voting_out_name)
             submission.to_csv(voting_out_file_name, index=False)
             print(' -- Submission written to: \'{}\''.format(voting_out_file_name))
 
