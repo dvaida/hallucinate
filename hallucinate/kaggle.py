@@ -10,7 +10,7 @@ class Kaggle(object):
         self.target_feature = target_feature
 
     def create_submissions(self, estimator_config_name=None, features_name=None,
-                           predictions_to_int=False, out_folder='.'):
+                           predictions_to_int=False, out_folder='.', verbose=0):
         print('\n -- Creating submissions...\n')
         if out_folder != '.':
             os.makedirs(out_folder, exist_ok=True)
@@ -53,21 +53,24 @@ class Kaggle(object):
                                         pd.Series(predictions.astype(int), name=target_feature)],
                                        axis=1)
                 out_file_name = '{}/submission_{}_{}.csv'.format(out_folder, config.name,
-                                                                          submission_key)
+                                                                 submission_key)
                 submission.to_csv(out_file_name, index=False)
-                print(' -- Submission written to: \'{}\''.format(out_file_name))
+                if verbose:
+                    print(' -- Submission written to: \'{}\''.format(out_file_name))
 
             self._create_cv_voting_submission(config_cv_runs, config.name, latest_features,
-                                              target_feature, all_predictions, out_folder)
+                                              target_feature, all_predictions, out_folder, verbose)
 
         self._create_cv_voting_submission(all_cv_runs, None, latest_features,
-                                          target_feature, all_predictions, out_folder)
+                                          target_feature, all_predictions, out_folder, verbose)
 
-        print('\n -- Done creating submissions.\n')
+        folder_str = 'the current folder' if out_folder == '.' else 'folder \'{}\''.format(
+            out_folder)
+        print('\n -- Submissions created in {}.\n'.format(folder_str))
         return pd.DataFrame(all_predictions)
 
     def _create_cv_voting_submission(self, cv_run_predictions, config_name, latest_features,
-                                     target_feature, all_predictions, out_folder):
+                                     target_feature, all_predictions, out_folder, verbose):
         config_name = config_name if config_name else 'GLB'  # global if None
         # Write a all CV runs voting prediction result
         vot = np.asarray(cv_run_predictions)
@@ -80,7 +83,8 @@ class Kaggle(object):
                                     pd.Series(predictions, name=target_feature)], axis=1)
             voting_out_file_name = '{}/submission_{}.csv'.format(out_folder, voting_out_name)
             submission.to_csv(voting_out_file_name, index=False)
-            print(' -- Submission written to: \'{}\''.format(voting_out_file_name))
+            if verbose:
+                print(' -- Submission written to: \'{}\''.format(voting_out_file_name))
 
     @staticmethod
     def vote_predict(predictions, strategy='majority', cast_to_int=True):
