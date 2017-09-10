@@ -478,10 +478,19 @@ class Experiment(object):
         g.set_xticklabels(rotation=25)
         plt.title("Accuracy vs feature selection threshold\n")
 
-    def plot_feature_importance(self, limit=15, figsize=7):
+    def plot_feature_importance(self, limit=15, figsize=7, for_estimators=None, for_runs=None,
+                                for_features=None):
+        # Don't print the same warning 20 times, one time for every warning is quite enough
+        warnings = set()
         importance_df = pd.DataFrame()
         for config_name, runs in self.runs.items():
-            for run in runs:
+            if for_estimators is not None and config_name not in for_estimators:
+                continue
+            for idx, run in enumerate(runs):
+                if for_runs is not None and idx not in for_runs:
+                    continue
+                if for_features is not None and run.feature_source_name not in for_features:
+                    continue
                 model = run.best_model
                 features = self.find_features(run.feature_source_name)
                 X, y, f_names, selected_f_names = features.build_Xy()
@@ -493,11 +502,14 @@ class Experiment(object):
                 else:
                     imps = [0.] * len(selected_f_names)
                 if max(imps) > 1:
-                    print(' !!! WARNING !!! {} was scaled to 0.5 for better visualization'.format(
-                        config_name))
+                    warnings.add(
+                        ' !!! WARNING !!! {} was scaled to 0.5 for better visualization'.format(
+                            config_name))
                     imps = np.asarray(imps) / (2 * np.max(np.asarray(imps), axis=0))
-                features_source_name = run.feature_source_name if not limit else '{} (limit: {})'.format(
-                    run.feature_source_name, limit)
+                if not limit:
+                    features_source_name = run.feature_source_name
+                else:
+                    features_source_name = '{} (limit: {})'.format(run.feature_source_name, limit)
                 local = pd.DataFrame({'Feature': selected_f_names, 'Importance': imps,
                                       'Estimator': [config_name] * len(selected_f_names),
                                       'Features': [features_source_name] * len(
@@ -505,6 +517,12 @@ class Experiment(object):
                 if limit:
                     local = local.sort_values(by='Importance', ascending=False).iloc[:limit, :]
                 importance_df = pd.concat([importance_df, local])
+        for w in warnings:
+            print(w)
+        if importance_df.empty:
+            print('Empty feature importance data, please review your filter options '
+                  '(for_estimators, for_features and for_runs) or leave the defaults (None)')
+            return
         g = sns.factorplot(x='Feature', y='Importance', col='Features', hue='Estimator',
                            data=importance_df.sort_values(by=['Importance'], ascending=False),
                            kind='bar', size=figsize)
