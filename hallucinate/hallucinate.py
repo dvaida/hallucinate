@@ -440,7 +440,7 @@ class Experiment(object):
         print('\nExperiment: \'{}\'\n{}'.format(self.name, '\n\n'.join(
             [fs.overview(verbose) for fs in self.features_sources])))
 
-    def plot_cv_runs(self, figsize=7):
+    def plot_cv_runs(self, figsize=7, violin_inner='box'):
         results_df = pd.DataFrame()
         sorted_configs = self.configs  # in case we want a different sorting
         for c in sorted_configs:
@@ -454,7 +454,7 @@ class Experiment(object):
                 cfg_df['Config'] = [c.name] * len(values)
                 results_df = pd.concat([results_df, cfg_df])
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
-                           size=figsize, legend_out=True)
+                           size=figsize, legend_out=True, inner=violin_inner)
         g.set_xticklabels(rotation=25)
         title = "Accuracy distribution over {} CV runs, cv shuffled: {}\n".format(self.cv.n_splits,
                                                                                   self.cv_shuffle)
