@@ -446,7 +446,7 @@ class Experiment(object):
         for c in sorted_configs:
             fs_names = defaultdict(list)
             for r in self.runs[c.name]:
-                fs_names[r.feature_source_name] = r.results
+                fs_names[r.key()] = r.results
             for key, values in fs_names.items():
                 cfg_df = pd.DataFrame()
                 cfg_df['CV Score'] = values
@@ -455,7 +455,7 @@ class Experiment(object):
                 results_df = pd.concat([results_df, cfg_df])
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, kind='violin',
                            size=figsize, legend_out=True, inner=violin_inner)
-        g.set_xticklabels(rotation=25)
+        g.set_xticklabels(rotation=75)
         title = "Accuracy distribution over {} CV runs, cv shuffled: {}\n".format(self.cv.n_splits,
                                                                                   self.cv_shuffle)
         plt.title(title)
@@ -475,7 +475,7 @@ class Experiment(object):
                 results_df = pd.concat([results_df, cfg_df])
         g = sns.factorplot(x='Features', y='CV Score', hue='Config', data=results_df, size=7,
                            legend_out=True)
-        g.set_xticklabels(rotation=25)
+        g.set_xticklabels(rotation=75)
         plt.title("Accuracy vs feature selection threshold\n")
 
     def plot_feature_importance(self, limit=15, figsize=7, for_estimators=None, for_runs=None,
